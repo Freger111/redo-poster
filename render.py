@@ -67,13 +67,16 @@ def render(tag: str, title: str, subtitle: str = "", index: str = "") -> bytes:
                             fill=cfg.LIME)
         d.text((90, 144), tag.upper(), font=_font(cfg.FONT_MONO, 26), fill=cfg.BLACK)
 
-    # заголовок
-    head = _font(cfg.FONT_HEAD, 92)
-    lines = _wrap(title, head, SIZE - 140, d)[:4]
+    # заголовок: размер подбирается под длину, чтобы не обрезать
+    length = len(title)
+    head_size = 92 if length <= 45 else (76 if length <= 70 else (60 if length <= 100 else 48))
+    line_step = int(head_size * 1.13)
+    head = _font(cfg.FONT_HEAD, head_size)
+    lines = _wrap(title, head, SIZE - 140, d)[:6]
     y = 240
     for line in lines:
         d.text((70, y), line, font=head, fill=cfg.WHITE)
-        y += 104
+        y += line_step
 
     # подзаголовок
     if subtitle:
@@ -89,7 +92,7 @@ def render(tag: str, title: str, subtitle: str = "", index: str = "") -> bytes:
 
     # футер
     d.line([(70, SIZE - 120), (SIZE - 70, SIZE - 120)], fill=(30, 30, 38), width=2)
-    d.text((70, SIZE - 96), "nft без хайпа", font=_font(cfg.FONT_MONO, 24), fill=cfg.GRAY)
+    d.text((70, SIZE - 96), "nft · gram · telegram", font=_font(cfg.FONT_MONO, 24), fill=cfg.GRAY)
 
     out = io.BytesIO()
     img.save(out, "JPEG", quality=93)
