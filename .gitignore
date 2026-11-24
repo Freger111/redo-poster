@@ -1,0 +1,12 @@
+# токен и локальные данные
+.env
+data/state.json
+data/out/
+data/*.log
+data/*.err
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
