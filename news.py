@@ -8,6 +8,7 @@ from __future__ import annotations
 import html
 import json
 import re
+import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -146,11 +147,41 @@ def pick(limit_checked: int = 12) -> dict | None:
     return item
 
 
+def translate(text: str, target: str = "ru") -> str:
+    """Перевод через бесплатный endpoint Google; при ошибке возвращает оригинал."""
+    if not text:
+        return ""
+    try:
+        params = urllib.parse.urlencode({"client": "gtx", "sl": "auto", "tl": target,
+                                         "dt": "t", "q": text[:1800]})
+        url = "https://translate.googleapis.com/translate_a/single?" + params
+        req = urllib.request.Request(url, headers=UA)
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            data = json.loads(resp.read().decode())
+        result = "".join(part[0] for part in data[0] if part[0])
+        return result.strip() or text
+    except Exception:
+        return text
+
+
+def _needs_translation(item: dict) -> bool:
+    if item["source"] in RU_SOURCES:
+        return False
+    text = item["title"]
+    latin = sum(1 for ch in text if "a" <= ch.lower() <= "z")
+    return latin > len(text) * 0.5
+
+
 def caption(item: dict) -> str:
-    lines = [f"<b>{item['title']}</b>"]
-    if item["lead"]:
-        lines += ["", item["lead"]]
-    lines += ["", f"Источник: {item['source']}", item["link"]]
+    title = item["title"]
+    lead = item["lead"]
+    if _needs_translation(item):
+        title = translate(title)
+        lead = translate(lead) if lead else ""
+    lines = [f"<b>{title}</b>"]
+    if lead:
+        lines += ["", lead]
+    lines += ["", f"источник: {item['source']}"]
     return "\n".join(lines)
 
 
