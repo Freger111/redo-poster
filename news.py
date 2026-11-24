@@ -181,7 +181,6 @@ def caption(item: dict) -> str:
     lines = [f"<b>{title}</b>"]
     if lead:
         lines += ["", lead]
-    lines += ["", f"источник: {item['source']}"]
     return "\n".join(lines)
 
 
