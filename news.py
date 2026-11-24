@@ -172,6 +172,91 @@ def _needs_translation(item: dict) -> bool:
     return latin > len(text) * 0.5
 
 
+GOOGLE = "https://news.google.com/rss/search?"
+
+
+def fetch_google(query: str, limit: int = 15) -> list[dict]:
+    """Новости по запросу через Google News RSS (заголовок, ссылка, издание)."""
+    url = GOOGLE + urllib.parse.urlencode({"q": query, "hl": "ru", "gl": "RU",
+                                           "ceid": "RU:ru"})
+    try:
+        root = ET.fromstring(_get(url, timeout=25))
+    except Exception:
+        return []
+    result: list[dict] = []
+    for node in root.iter("item"):
+        raw_title = _clean(node.findtext("title") or "")
+        link = (node.findtext("link") or "").strip()
+        source_node = node.find("source")
+        source = _clean(source_node.text if source_node is not None else "")
+        if not raw_title or not link:
+            continue
+        title = raw_title
+        if source and title.endswith(" - " + source):
+            title = title[: -len(" - " + source)].strip()
+        result.append({"title": title, "link": link, "lead": "", "image": "",
+                       "source": source or "google news", "feed": "google"})
+        if len(result) >= limit:
+            break
+    return result
+
+
+def pick_topic(topic_key: str) -> dict | None:
+    """Свежая новость по конкретной теме (nft, gram, telegram, durov)."""
+    import topics as topics_mod
+
+    topic = topics_mod.TOPICS.get(topic_key)
+    if not topic:
+        return None
+    seen = load_seen()
+    pool: list[dict] = []
+    for query in topic.get("queries", []):
+        pool.extend(fetch_google(query, limit=12))
+    for feed in topic.get("feeds", []):
+        try:
+            pool.extend(_fetch_feed(feed, limit=10))
+        except Exception:
+            continue
+    if topic_key == "nft":
+        pool.extend(fetch(12))
+
+    keywords = topic["keywords"]
+    scored: list[tuple[int, dict]] = []
+    for item in pool:
+        if item["link"] in seen:
+            continue
+        text = f"{item['title']} {item.get('lead', '')}".lower()
+        hits = sum(1 for word in keywords if word in text)
+        if hits == 0:
+            continue
+        scored.append((hits, item))
+    if not scored:
+        return None
+    scored.sort(key=lambda pair: pair[0], reverse=True)
+    item = scored[0][1]
+    if not item.get("lead"):
+        item["lead"] = ""
+    return item
+
+
+def _fetch_feed(feed: str, limit: int = 10) -> list[dict]:
+    root = ET.fromstring(_get(feed))
+    result: list[dict] = []
+    for node in root.iter("item"):
+        title = _clean(node.findtext("title") or "")
+        link = (node.findtext("link") or "").strip()
+        if not title or not link:
+            continue
+        result.append({"title": title, "link": link,
+                       "lead": _first_sentence(node.findtext("description") or ""),
+                       "image": _find_image(node),
+                       "source": urlparse(link).netloc.replace("www.", ""),
+                       "feed": feed})
+        if len(result) >= limit:
+            break
+    return result
+
+
 def caption(item: dict) -> str:
     title = item["title"]
     lead = item["lead"]
