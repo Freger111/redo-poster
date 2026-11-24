@@ -56,10 +56,15 @@ def cmd_post_now() -> int:
     if post is None:
         print("Очередь пуста")
         return 1
-    image = render.render(post.tag, post.title, post.text.split("\n")[0][:80],
-                          index=f"{post.id:02d}")
     tg = poster.Telegram(cfg.BOT_TOKEN)
-    result = poster.publish(tg, post, image)
+    if post.tag == "NOTE":
+        caption = f"<b>{post.title}</b>\n\n{post.text}" if post.text else f"<b>{post.title}</b>"
+        result = tg.call("sendMessage", chat_id=cfg.CHANNEL, text=caption[:4000],
+                         parse_mode="HTML")
+    else:
+        image = render.render(post.tag, post.title, post.text.split("\n")[0][:80],
+                              index=f"{post.id:02d}")
+        result = poster.publish(tg, post, image)
     if not result.get("ok"):
         print("ошибка публикации:", result)
         return 1
@@ -301,7 +306,7 @@ def cmd_loop() -> int:
                 hour, minute = [int(x) for x in slot_time.split(":")]
                 fire_at = current.replace(hour=hour, minute=minute, second=0, microsecond=0)
                 slot_key = f"{current:%Y-%m-%d} {slot_time}"
-                if current < fire_at or state.get(f"slot_{kind}") == slot_key:
+                if current < fire_at or state.get(f"slot_{kind}_{slot_time}") == slot_key:
                     continue
 
                 code = 1
@@ -320,7 +325,7 @@ def cmd_loop() -> int:
 
                 if code == 0:
                     state = queue_mod.load_state()
-                    state[f"slot_{kind}"] = slot_key
+                    state[f"slot_{kind}_{slot_time}"] = slot_key
                     queue_mod.save_state(state)
                     print(f"{kind} · {slot_key} отработан")
                     break
