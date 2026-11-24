@@ -17,12 +17,16 @@ def load_env() -> None:
     env = ROOT / ".env"
     if not env.exists():
         return
-    for line in env.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
+    text = env.read_text(encoding="utf-8-sig")   # utf-8-sig снимает BOM
+    for line in text.splitlines():
+        line = line.strip().lstrip("\ufeff")
         if not line or line.startswith("#") or "=" not in line:
             continue
         key, value = line.split("=", 1)
-        os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
+        key = key.strip().strip('"').strip("'")
+        value = value.strip().strip('"').strip("'")
+        if key:
+            os.environ.setdefault(key, value)
 
 
 load_env()
