@@ -28,6 +28,7 @@ import gram as gram_mod  # noqa: E402
 import gifts as gifts_mod  # noqa: E402
 import gifts_real as gifts_real_mod  # noqa: E402
 import giveaway as gw_mod  # noqa: E402
+import poller  # noqa: E402
 import topics as topics_mod  # noqa: E402
 import content as queue_mod  # noqa: E402
 import render  # noqa: E402
@@ -293,8 +294,8 @@ def cmd_loop() -> int:
         plan.append((time_part.strip(), kind.strip()))
     print(f"Автопостер запущен. Канал: {cfg.CHANNEL}")
     gw_tg = poster.Telegram(cfg.BOT_TOKEN)
-    gw_mod.start_polling(gw_tg)
-    print("Розыгрыши: кнопка «Участвую» активна")
+    poller.start(gw_tg)
+    print("Приём постов: пишите боту в личку — он предложит опубликовать")
     for slot_time, kind in plan:
         print(f"  {slot_time} — {kind}")
     import time
