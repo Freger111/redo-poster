@@ -26,6 +26,7 @@ import news as news_mod  # noqa: E402
 import gifs as gifs_mod  # noqa: E402
 import gram as gram_mod  # noqa: E402
 import gifts as gifts_mod  # noqa: E402
+import gifts_real as gifts_real_mod  # noqa: E402
 import giveaway as gw_mod  # noqa: E402
 import topics as topics_mod  # noqa: E402
 import content as queue_mod  # noqa: E402
@@ -262,28 +263,24 @@ def cmd_topic(topic_key: str, publish: bool = True) -> int:
 
 
 def cmd_gifts(publish: bool = True) -> int:
-    coin = gram_mod.fetch()
-    if not coin:
-        print("нет данных GRAM")
+    data = gifts_real_mod.build(4)
+    if data is None:
+        print("нет настоящих картинок подарков")
         return 1
-    collections = gifts_mod.fetch_collections(4)
-    if not collections:
-        print("не удалось получить коллекции подарков")
-        return 1
-    data = gifts_mod.render(coin, collections)
-    (cfg.OUT / "gifts.jpg").write_bytes(data)
-    text = gifts_mod.caption(coin, collections)
+    image = data["image"]
+    text = data["text"]
+    (cfg.OUT / "gifts_real.webp").write_bytes(image)
     if not publish:
-        print("картинка:", cfg.OUT / "gifts.jpg")
+        print("картинка:", cfg.OUT / "gifts_real.webp")
         print(text)
         return 0
     tg = poster.Telegram(cfg.BOT_TOKEN)
-    result = tg.call("sendPhoto", files={"photo": ("gifts.jpg", data, "image/jpeg")},
+    result = tg.call("sendPhoto", files={"photo": ("gift.webp", image, "image/webp")},
                      chat_id=cfg.CHANNEL, caption=text[:1024], parse_mode="HTML")
     if not result.get("ok"):
         print("ошибка публикации:", result)
         return 1
-    print("подарки опубликованы:", ", ".join(c["name"] for c in collections))
+    print("подарки опубликованы (настоящая картинка)")
     return 0
 
 
@@ -326,7 +323,8 @@ def cmd_loop() -> int:
                     code = cmd_gifts(True)
                 elif kind == "mix":
                     # вечерний слот чередует форматы: подарки → GRAM → NFT
-                    options = [cmd_gifts, cmd_gram, lambda pub=True: cmd_topic("nft", pub)]
+                    options = [cmd_gifts, lambda pub=True: cmd_topic("nft", pub),
+                               lambda pub=True: cmd_topic("telegram", pub)]
                     picker = current.timetuple().tm_yday % len(options)
                     code = options[picker](True)
                 elif kind in topics_mod.TOPICS:
