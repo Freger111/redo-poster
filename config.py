@@ -31,6 +31,7 @@ VERSION = "1.0"
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
 CHANNEL = os.environ.get("CHANNEL", "@redo_nft")
 POST_TIMES = [t.strip() for t in os.environ.get("POST_TIMES", "10:00").split(",") if t.strip()]
+MARKET_TIMES = [t.strip() for t in os.environ.get("MARKET_TIMES", "21:00").split(",") if t.strip()]
 TIMEZONE_OFFSET = int(os.environ.get("TZ_OFFSET", "3"))   # Москва = UTC+3
 LINK = os.environ.get("CHANNEL_LINK", "t.me/redo_nft")
 
