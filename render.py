@@ -90,9 +90,6 @@ def render(tag: str, title: str, subtitle: str = "", index: str = "") -> bytes:
     # футер
     d.line([(70, SIZE - 120), (SIZE - 70, SIZE - 120)], fill=(30, 30, 38), width=2)
     d.text((70, SIZE - 96), "nft без хайпа", font=_font(cfg.FONT_MONO, 24), fill=cfg.GRAY)
-    link_w = d.textlength(cfg.LINK, font=_font(cfg.FONT_MONO, 24))
-    d.text((SIZE - 70 - link_w, SIZE - 96), cfg.LINK, font=_font(cfg.FONT_MONO, 24),
-           fill=cfg.GRAY)
 
     out = io.BytesIO()
     img.save(out, "JPEG", quality=93)
