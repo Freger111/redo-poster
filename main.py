@@ -24,6 +24,8 @@ import poster  # noqa: E402
 import market as market_mod  # noqa: E402
 import news as news_mod  # noqa: E402
 import gifs as gifs_mod  # noqa: E402
+import gram as gram_mod  # noqa: E402
+import topics as topics_mod  # noqa: E402
 import content as queue_mod  # noqa: E402
 import render  # noqa: E402
 
@@ -201,55 +203,101 @@ def cmd_gif_news(publish: bool = True) -> int:
     return 0
 
 
-def cmd_loop() -> int:
-    print(f"Автопостер запущен. Канал: {cfg.CHANNEL}")
-    print(f"  новости: {', '.join(cfg.NEWS_TIMES) or '—'}")
-    print(f"  очередь: {', '.join(cfg.POST_TIMES) or '—'}")
-    print(f"  рынок:   {', '.join(cfg.MARKET_TIMES) or '—'}")
-    import time
+def cmd_gram(publish: bool = True) -> int:
+    coin = gram_mod.fetch()
+    if not coin:
+        print("нет данных GRAM")
+        return 1
+    data = gram_mod.render(coin)
+    path = cfg.OUT / "gram.jpg"
+    path.write_bytes(data)
+    text = gram_mod.caption(coin)
+    if not publish:
+        print("картинка:", path)
+        print(text)
+        return 0
+    tg = poster.Telegram(cfg.BOT_TOKEN)
+    result = tg.call("sendPhoto", files={"photo": ("gram.jpg", data, "image/jpeg")},
+                     chat_id=cfg.CHANNEL, caption=text[:1024], parse_mode="HTML")
+    if not result.get("ok"):
+        print("ошибка публикации:", result)
+        return 1
+    print("GRAM опубликован:", f"{coin['change_24h']:+.2f}%")
+    return 0
 
-    def slot_due(slots: list[str], key: str, state: dict, current) -> str | None:
-        for slot in slots:
-            hour, minute = [int(x) for x in slot.split(":")]
-            fire_at = current.replace(hour=hour, minute=minute, second=0, microsecond=0)
-            slot_key = f"{current:%Y-%m-%d} {slot}"
-            if current >= fire_at and state.get(key) != slot_key:
-                return slot_key
-        return None
+
+def cmd_topic(topic_key: str, publish: bool = True) -> int:
+    item = news_mod.pick_topic(topic_key)
+    if item is None:
+        print(f"нет новостей по теме {topic_key}")
+        return 1
+    text = news_mod.caption(item)
+    image_path = news_mod.download_image(item["image"]) if item.get("image") else None
+    if image_path is None:
+        title = text.split("\n")[0].replace("<b>", "").replace("</b>", "")
+        tag = topics_mod.TOPICS[topic_key]["title"].upper()
+        data = render.render(tag, title, item.get("lead", "")[:80])
+        image_path = cfg.OUT / f"topic_{topic_key}.jpg"
+        image_path.write_bytes(data)
+    if not publish:
+        print("картинка:", image_path)
+        print(text)
+        return 0
+    tg = poster.Telegram(cfg.BOT_TOKEN)
+    result = tg.call("sendPhoto", files={"photo": (image_path.name, image_path.read_bytes(),
+                                                  "image/jpeg")},
+                     chat_id=cfg.CHANNEL, caption=text[:1024], parse_mode="HTML")
+    if not result.get("ok"):
+        print("ошибка публикации:", result)
+        return 1
+    seen = news_mod.load_seen()
+    seen.add(item["link"])
+    news_mod.save_seen(seen)
+    print(f"[{topic_key}] опубликовано:", item["title"][:60])
+    return 0
+
+
+def cmd_loop() -> int:
+    plan: list[tuple[str, str]] = []
+    for raw in cfg.SLOTS:
+        if "=" not in raw:
+            continue
+        time_part, kind = raw.split("=", 1)
+        plan.append((time_part.strip(), kind.strip()))
+    print(f"Автопостер запущен. Канал: {cfg.CHANNEL}")
+    for slot_time, kind in plan:
+        print(f"  {slot_time} — {kind}")
+    import time
 
     while True:
         try:
             current = now_local()
             state = queue_mod.load_state()
+            for slot_time, kind in plan:
+                hour, minute = [int(x) for x in slot_time.split(":")]
+                fire_at = current.replace(hour=hour, minute=minute, second=0, microsecond=0)
+                slot_key = f"{current:%Y-%m-%d} {slot_time}"
+                if current < fire_at or state.get(f"slot_{kind}") == slot_key:
+                    continue
 
-            news_slot = slot_due(cfg.NEWS_TIMES, "last_news_slot", state, current)
-            if news_slot and cmd_news(True) == 0:
-                state = queue_mod.load_state()
-                state["last_news_slot"] = news_slot
-                queue_mod.save_state(state)
-                print(f"новостной слот {news_slot} отработан")
-                time.sleep(60)
-                continue
+                code = 1
+                if kind == "queue":
+                    posts = queue_mod.load()
+                    if queue_mod.next_post(posts) is None:
+                        print("очередь пуста — добавьте посты")
+                    else:
+                        code = cmd_post_now()
+                elif kind == "gram":
+                    code = cmd_gram(True)
+                elif kind in topics_mod.TOPICS:
+                    code = cmd_topic(kind, True)
 
-            market_slot = slot_due(cfg.MARKET_TIMES, "last_market_slot", state, current)
-            if market_slot and cmd_gif_market(True) == 0:
-                state = queue_mod.load_state()
-                state["last_market_slot"] = market_slot
-                queue_mod.save_state(state)
-                print(f"рыночный слот {market_slot} отработан")
-                time.sleep(60)
-                continue
-
-            post_slot = slot_due(cfg.POST_TIMES, "last_slot", state, current)
-            if post_slot:
-                posts = queue_mod.load()
-                if queue_mod.next_post(posts) is None:
-                    print("очередь пуста — жду новых постов")
-                elif cmd_post_now() == 0:
+                if code == 0:
                     state = queue_mod.load_state()
-                    state["last_slot"] = post_slot
+                    state[f"slot_{kind}"] = slot_key
                     queue_mod.save_state(state)
-                    print(f"слот {post_slot} отработан")
+                    print(f"{kind} · {slot_key} отработан")
+                    break
         except Exception as exc:
             print("ошибка цикла:", exc)
         time.sleep(60)
@@ -316,6 +364,8 @@ def main() -> int:
     parser.add_argument("--post-now", action="store_true")
     parser.add_argument("--market", action="store_true", help="опубликовать рыночный пост")
     parser.add_argument("--market-preview", action="store_true", help="только собрать картинку")
+    parser.add_argument("--gram", action="store_true", help="пост про GRAM")
+    parser.add_argument("--topic", default="", help="тема: nft, gram, telegram, durov")
     parser.add_argument("--gif-news", action="store_true", help="гифка по новости")
     parser.add_argument("--gif-market", action="store_true", help="гифка рынка")
     parser.add_argument("--news", action="store_true", help="опубликовать новость с сайта")
@@ -336,6 +386,10 @@ def main() -> int:
         return cmd_market(publish=False)
     if args.market:
         return cmd_market(publish=True)
+    if args.topic:
+        return cmd_topic(args.topic, publish=True)
+    if args.gram:
+        return cmd_gram(publish=True)
     if args.gif_market:
         return cmd_gif_market(True)
     if args.gif_news:
