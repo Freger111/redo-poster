@@ -22,6 +22,13 @@ TOPICS = {
         "queries": ["Telegram новости", "Telegram крипто", "Telegram мини-приложения"],
         "feeds": [],
     },
+    "pepe": {
+        "title": "PEPE",
+        "keywords": ["pepe", "пепе", "лягушк", "frog", "жаба", "rare pepe", "pepe nft"],
+        "queries": ["Pepe NFT", "Rare Pepe", "Пепе NFT", "NFT лягушка",
+                    "самый дорогой NFT", "NFT редкость"],
+        "feeds": [],
+    },
     "durov": {
         "title": "Дуров",
         "keywords": ["дуров", "durov", "павел", "павла"],
@@ -30,7 +37,7 @@ TOPICS = {
     },
 }
 
-ORDER = ["nft", "gram", "telegram", "durov"]
+ORDER = ["nft", "pepe", "gram", "telegram", "durov"]
 
 
 def detect(text: str) -> str | None:
