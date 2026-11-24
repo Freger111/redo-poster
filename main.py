@@ -236,7 +236,7 @@ def cmd_topic(topic_key: str, publish: bool = True) -> int:
     if image_path is None:
         title = text.split("\n")[0].replace("<b>", "").replace("</b>", "")
         tag = topics_mod.TOPICS[topic_key]["title"].upper()
-        data = render.render(tag, title, item.get("lead", "")[:80])
+        data = render.render(tag, title, item.get("lead", "")[:80], invert=(topic_key == "pepe"))
         image_path = cfg.OUT / f"topic_{topic_key}.jpg"
         image_path.write_bytes(data)
     if not publish:
