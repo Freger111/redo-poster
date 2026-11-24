@@ -320,6 +320,11 @@ def cmd_loop() -> int:
                     code = cmd_gram(True)
                 elif kind == "gifts":
                     code = cmd_gifts(True)
+                elif kind == "mix":
+                    # вечерний слот чередует форматы: подарки → GRAM → NFT
+                    options = [cmd_gifts, cmd_gram, lambda pub=True: cmd_topic("nft", pub)]
+                    picker = current.timetuple().tm_yday % len(options)
+                    code = options[picker](True)
                 elif kind in topics_mod.TOPICS:
                     code = cmd_topic(kind, True)
 
