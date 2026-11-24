@@ -26,6 +26,7 @@ import news as news_mod  # noqa: E402
 import gifs as gifs_mod  # noqa: E402
 import gram as gram_mod  # noqa: E402
 import gifts as gifts_mod  # noqa: E402
+import giveaway as gw_mod  # noqa: E402
 import topics as topics_mod  # noqa: E402
 import content as queue_mod  # noqa: E402
 import render  # noqa: E402
@@ -294,6 +295,9 @@ def cmd_loop() -> int:
         time_part, kind = raw.split("=", 1)
         plan.append((time_part.strip(), kind.strip()))
     print(f"Автопостер запущен. Канал: {cfg.CHANNEL}")
+    gw_tg = poster.Telegram(cfg.BOT_TOKEN)
+    gw_mod.start_polling(gw_tg)
+    print("Розыгрыши: кнопка «Участвую» активна")
     for slot_time, kind in plan:
         print(f"  {slot_time} — {kind}")
     import time
@@ -334,6 +338,8 @@ def cmd_loop() -> int:
                     queue_mod.save_state(state)
                     print(f"{kind} · {slot_key} отработан")
                     break
+            for line in gw_mod.auto_finish(gw_tg):
+                print("розыгрыш завершён:", line)
         except Exception as exc:
             print("ошибка цикла:", exc)
         time.sleep(60)
@@ -402,6 +408,10 @@ def main() -> int:
     parser.add_argument("--market-preview", action="store_true", help="только собрать картинку")
     parser.add_argument("--gram", action="store_true", help="пост про GRAM")
     parser.add_argument("--gifts", action="store_true", help="подарки Telegram")
+    parser.add_argument("--giveaway", default="", help="запустить розыгрыш: --giveaway \"Приз\"")
+    parser.add_argument("--hours", type=int, default=24)
+    parser.add_argument("--gw-finish", type=int, default=0)
+    parser.add_argument("--gw-list", action="store_true")
     parser.add_argument("--topic", default="", help="тема: nft, gram, telegram, durov")
     parser.add_argument("--gif-news", action="store_true", help="гифка по новости")
     parser.add_argument("--gif-market", action="store_true", help="гифка рынка")
@@ -429,6 +439,20 @@ def main() -> int:
         return cmd_gram(publish=True)
     if args.gifts:
         return cmd_gifts(publish=True)
+    if args.gw_list:
+        for gw in gw_mod.load():
+            state = 'завершён' if gw.finished else f'идёт, участников {len(gw.participants)}'
+            print(f'#{gw.id} {gw.prize} — {state}')
+        return 0
+    if args.gw_finish:
+        tg = poster.Telegram(cfg.BOT_TOKEN)
+        print(gw_mod.finish(tg, args.gw_finish))
+        return 0
+    if args.giveaway:
+        tg = poster.Telegram(cfg.BOT_TOKEN)
+        gw = gw_mod.start(tg, args.giveaway, args.hours)
+        print(f'розыгрыш #{gw.id} запущен: {gw.prize}, {gw.hours} ч')
+        return 0
     if args.gif_market:
         return cmd_gif_market(True)
     if args.gif_news:
