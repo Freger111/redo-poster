@@ -32,6 +32,8 @@ def load_env() -> None:
 load_env()
 
 VERSION = "1.0"
+
+ADMINS = {int(x) for x in os.environ.get("ADMIN_IDS", "").replace(" ", "").split(",") if x.strip().isdigit()}
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
 CHANNEL = os.environ.get("CHANNEL", "@redo_nft")
 POST_TIMES = [t.strip() for t in os.environ.get("POST_TIMES", "10:00").split(",") if t.strip()]
