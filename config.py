@@ -37,6 +37,11 @@ CHANNEL = os.environ.get("CHANNEL", "@redo_nft")
 POST_TIMES = [t.strip() for t in os.environ.get("POST_TIMES", "10:00").split(",") if t.strip()]
 MARKET_TIMES = [t.strip() for t in os.environ.get("MARKET_TIMES", "21:00").split(",") if t.strip()]
 NEWS_TIMES = [t.strip() for t in os.environ.get("NEWS_TIMES", "13:00,19:00").split(",") if t.strip()]
+
+# расписание вида "10:00=queue,13:00=nft,16:00=telegram,19:00=durov,21:00=gram"
+SLOTS = [s.strip() for s in os.environ.get(
+    "SLOTS", "10:00=queue,13:00=nft,16:00=telegram,19:00=durov,21:00=gram"
+).split(",") if s.strip()]
 TIMEZONE_OFFSET = int(os.environ.get("TZ_OFFSET", "3"))   # Москва = UTC+3
 LINK = os.environ.get("CHANNEL_LINK", "t.me/redo_nft")
 
