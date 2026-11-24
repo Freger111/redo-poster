@@ -136,8 +136,6 @@ def render(coins: list[dict], index: str = "") -> bytes:
     d.text((64, 946), subtitle, font=_font(cfg.FONT_MONO, 28), fill=accent)
 
     # футер
-    link_w = d.textlength(cfg.LINK, font=_font(cfg.FONT_MONO, 22))
-    d.text((SIZE - 60 - link_w, 1010), cfg.LINK, font=_font(cfg.FONT_MONO, 22), fill=cfg.GRAY)
     if index:
         d.text((60, 1006), index, font=_font(cfg.FONT_MONO, 22), fill=cfg.GRAY)
 
