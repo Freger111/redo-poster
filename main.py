@@ -22,6 +22,7 @@ import config as cfg  # noqa: E402
 import digest as digest_mod  # noqa: E402
 import poster  # noqa: E402
 import market as market_mod  # noqa: E402
+import news as news_mod  # noqa: E402
 import content as queue_mod  # noqa: E402
 import render  # noqa: E402
 
@@ -118,47 +119,84 @@ def cmd_add(raw: str) -> int:
     return 0
 
 
+def cmd_news(publish: bool = True) -> int:
+    item = news_mod.pick()
+    if item is None:
+        print("свежих новостей нет")
+        return 1
+    text = news_mod.caption(item)
+    path = news_mod.download_image(item["image"]) if item["image"] else None
+    if not publish:
+        print("источник:", item["source"])
+        print("картинка:", path if path else "нет")
+        print(text)
+        return 0
+
+    tg = poster.Telegram(cfg.BOT_TOKEN)
+    if path:
+        result = tg.call("sendPhoto", files={"photo": ("news.jpg", path.read_bytes(), "image/jpeg")},
+                         chat_id=cfg.CHANNEL, caption=text[:1024], parse_mode="HTML")
+    else:
+        result = tg.call("sendMessage", chat_id=cfg.CHANNEL, text=text[:4000], parse_mode="HTML")
+    if not result.get("ok"):
+        print("ошибка публикации:", result)
+        return 1
+    seen = news_mod.load_seen()
+    seen.add(item["link"])
+    news_mod.save_seen(seen)
+    print("новость опубликована:", item["title"][:60])
+    return 0
+
+
 def cmd_loop() -> int:
-    print(f"Автопостер запущен. Канал: {cfg.CHANNEL}. Время: {', '.join(cfg.POST_TIMES)}")
+    print(f"Автопостер запущен. Канал: {cfg.CHANNEL}")
+    print(f"  новости: {', '.join(cfg.NEWS_TIMES) or '—'}")
+    print(f"  очередь: {', '.join(cfg.POST_TIMES) or '—'}")
+    print(f"  рынок:   {', '.join(cfg.MARKET_TIMES) or '—'}")
     import time
+
+    def slot_due(slots: list[str], key: str, state: dict, current) -> str | None:
+        for slot in slots:
+            hour, minute = [int(x) for x in slot.split(":")]
+            fire_at = current.replace(hour=hour, minute=minute, second=0, microsecond=0)
+            slot_key = f"{current:%Y-%m-%d} {slot}"
+            if current >= fire_at and state.get(key) != slot_key:
+                return slot_key
+        return None
 
     while True:
         try:
             current = now_local()
             state = queue_mod.load_state()
-            today = current.strftime("%Y-%m-%d")
 
-            # рыночный пост (heatmap) в свои слоты
-            market_done = False
-            for slot in cfg.MARKET_TIMES:
-                hour, minute = [int(x) for x in slot.split(":")]
-                slot_dt = current.replace(hour=hour, minute=minute, second=0, microsecond=0)
-                slot_key = f"{today} {slot}"
-                if current >= slot_dt and state.get("last_market_slot") != slot_key:
-                    if cmd_market(True) == 0:
-                        state = queue_mod.load_state()
-                        state["last_market_slot"] = slot_key
-                        queue_mod.save_state(state)
-                        print(f"рыночный слот {slot_key} отработан")
-                    market_done = True
-                    break
+            news_slot = slot_due(cfg.NEWS_TIMES, "last_news_slot", state, current)
+            if news_slot and cmd_news(True) == 0:
+                state = queue_mod.load_state()
+                state["last_news_slot"] = news_slot
+                queue_mod.save_state(state)
+                print(f"новостной слот {news_slot} отработан")
+                time.sleep(60)
+                continue
 
-            if not market_done:
-                for slot in cfg.POST_TIMES:
-                    hour, minute = [int(x) for x in slot.split(":")]
-                    slot_dt = current.replace(hour=hour, minute=minute, second=0, microsecond=0)
-                    slot_key = f"{today} {slot}"
-                    if current >= slot_dt and state.get("last_slot") != slot_key:
-                        posts = queue_mod.load()
-                        if queue_mod.next_post(posts) is None:
-                            print("очередь пуста — жду новых постов")
-                            break
-                        if cmd_post_now() == 0:
-                            state = queue_mod.load_state()
-                            state["last_slot"] = slot_key
-                            queue_mod.save_state(state)
-                            print(f"слот {slot_key} отработан")
-                        break
+            market_slot = slot_due(cfg.MARKET_TIMES, "last_market_slot", state, current)
+            if market_slot and cmd_market(True) == 0:
+                state = queue_mod.load_state()
+                state["last_market_slot"] = market_slot
+                queue_mod.save_state(state)
+                print(f"рыночный слот {market_slot} отработан")
+                time.sleep(60)
+                continue
+
+            post_slot = slot_due(cfg.POST_TIMES, "last_slot", state, current)
+            if post_slot:
+                posts = queue_mod.load()
+                if queue_mod.next_post(posts) is None:
+                    print("очередь пуста — жду новых постов")
+                elif cmd_post_now() == 0:
+                    state = queue_mod.load_state()
+                    state["last_slot"] = post_slot
+                    queue_mod.save_state(state)
+                    print(f"слот {post_slot} отработан")
         except Exception as exc:
             print("ошибка цикла:", exc)
         time.sleep(60)
@@ -225,6 +263,8 @@ def main() -> int:
     parser.add_argument("--post-now", action="store_true")
     parser.add_argument("--market", action="store_true", help="опубликовать рыночный пост")
     parser.add_argument("--market-preview", action="store_true", help="только собрать картинку")
+    parser.add_argument("--news", action="store_true", help="опубликовать новость с сайта")
+    parser.add_argument("--news-preview", action="store_true", help="показать новость без публикации")
     parser.add_argument("--digest", action="store_true")
     parser.add_argument("--loop", action="store_true")
     parser.add_argument("--selftest", action="store_true")
@@ -241,6 +281,10 @@ def main() -> int:
         return cmd_market(publish=False)
     if args.market:
         return cmd_market(publish=True)
+    if args.news_preview:
+        return cmd_news(publish=False)
+    if args.news:
+        return cmd_news(publish=True)
     if args.digest:
         return cmd_digest()
     if args.post_now:
