@@ -23,6 +23,7 @@ import digest as digest_mod  # noqa: E402
 import poster  # noqa: E402
 import market as market_mod  # noqa: E402
 import news as news_mod  # noqa: E402
+import gifs as gifs_mod  # noqa: E402
 import content as queue_mod  # noqa: E402
 import render  # noqa: E402
 
@@ -148,6 +149,58 @@ def cmd_news(publish: bool = True) -> int:
     return 0
 
 
+def cmd_gif_market(publish: bool = True) -> int:
+    coins = market_mod.fetch(24)
+    if not coins:
+        print("нет данных рынка")
+        return 1
+    data = gifs_mod.heatmap(coins)
+    (cfg.OUT / "heatmap.gif").write_bytes(data)
+    text = market_mod.caption(coins)
+    if not publish:
+        print("гифка:", cfg.OUT / "heatmap.gif", f"{len(data)//1024} КБ")
+        print(text)
+        return 0
+    tg = poster.Telegram(cfg.BOT_TOKEN)
+    result = tg.call("sendAnimation", files={"animation": ("market.gif", data, "image/gif")},
+                     chat_id=cfg.CHANNEL, caption=text[:1024], parse_mode="HTML")
+    if not result.get("ok"):
+        print("ошибка публикации:", result)
+        return 1
+    print("гифка рынка опубликована")
+    return 0
+
+
+def cmd_gif_news(publish: bool = True) -> int:
+    item = news_mod.pick()
+    if item is None:
+        print("свежих новостей нет")
+        return 1
+    path = news_mod.download_image(item["image"]) if item["image"] else None
+    if path is None:
+        print("у новости нет картинки")
+        return 1
+    text = news_mod.caption(item)
+    title = text.split("\n")[0]
+    data = gifs_mod.news_zoom(path, title)
+    (cfg.OUT / "news.gif").write_bytes(data)
+    if not publish:
+        print("гифка:", cfg.OUT / "news.gif", f"{len(data)//1024} КБ")
+        print(text)
+        return 0
+    tg = poster.Telegram(cfg.BOT_TOKEN)
+    result = tg.call("sendAnimation", files={"animation": ("news.gif", data, "image/gif")},
+                     chat_id=cfg.CHANNEL, caption=text[:1024], parse_mode="HTML")
+    if not result.get("ok"):
+        print("ошибка публикации:", result)
+        return 1
+    seen = news_mod.load_seen()
+    seen.add(item["link"])
+    news_mod.save_seen(seen)
+    print("гифка-новость опубликована:", item["title"][:60])
+    return 0
+
+
 def cmd_loop() -> int:
     print(f"Автопостер запущен. Канал: {cfg.CHANNEL}")
     print(f"  новости: {', '.join(cfg.NEWS_TIMES) or '—'}")
@@ -179,7 +232,7 @@ def cmd_loop() -> int:
                 continue
 
             market_slot = slot_due(cfg.MARKET_TIMES, "last_market_slot", state, current)
-            if market_slot and cmd_market(True) == 0:
+            if market_slot and cmd_gif_market(True) == 0:
                 state = queue_mod.load_state()
                 state["last_market_slot"] = market_slot
                 queue_mod.save_state(state)
@@ -263,6 +316,8 @@ def main() -> int:
     parser.add_argument("--post-now", action="store_true")
     parser.add_argument("--market", action="store_true", help="опубликовать рыночный пост")
     parser.add_argument("--market-preview", action="store_true", help="только собрать картинку")
+    parser.add_argument("--gif-news", action="store_true", help="гифка по новости")
+    parser.add_argument("--gif-market", action="store_true", help="гифка рынка")
     parser.add_argument("--news", action="store_true", help="опубликовать новость с сайта")
     parser.add_argument("--news-preview", action="store_true", help="показать новость без публикации")
     parser.add_argument("--digest", action="store_true")
@@ -281,6 +336,10 @@ def main() -> int:
         return cmd_market(publish=False)
     if args.market:
         return cmd_market(publish=True)
+    if args.gif_market:
+        return cmd_gif_market(True)
+    if args.gif_news:
+        return cmd_gif_news(True)
     if args.news_preview:
         return cmd_news(publish=False)
     if args.news:
