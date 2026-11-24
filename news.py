@@ -210,15 +210,14 @@ def pick_topic(topic_key: str) -> dict | None:
         return None
     seen = load_seen()
     pool: list[dict] = []
-    for query in topic.get("queries", []):
-        pool.extend(fetch_google(query, limit=12))
     for feed in topic.get("feeds", []):
         try:
-            pool.extend(_fetch_feed(feed, limit=10))
+            pool.extend(_fetch_feed(feed, limit=20))
         except Exception:
             continue
-    if topic_key == "nft":
-        pool.extend(fetch(12))
+    if not pool:
+        for query in topic.get("queries", []):
+            pool.extend(fetch_google(query, limit=10))
 
     keywords = topic["keywords"]
     scored: list[tuple[int, dict]] = []
@@ -229,6 +228,12 @@ def pick_topic(topic_key: str) -> dict | None:
         hits = sum(1 for word in keywords if word in text)
         if hits == 0:
             continue
+        image = item.get("image") or ""
+        if not image:
+            image = _og_image(item["link"])
+        if not image:
+            continue                      # без картинки не публикуем
+        item["image"] = image
         scored.append((hits, item))
     if not scored:
         return None
