@@ -25,6 +25,7 @@ import market as market_mod  # noqa: E402
 import news as news_mod  # noqa: E402
 import gifs as gifs_mod  # noqa: E402
 import gram as gram_mod  # noqa: E402
+import gifts as gifts_mod  # noqa: E402
 import topics as topics_mod  # noqa: E402
 import content as queue_mod  # noqa: E402
 import render  # noqa: E402
@@ -234,11 +235,8 @@ def cmd_topic(topic_key: str, publish: bool = True) -> int:
     text = news_mod.caption(item)
     image_path = news_mod.download_image(item["image"]) if item.get("image") else None
     if image_path is None:
-        title = text.split("\n")[0].replace("<b>", "").replace("</b>", "")
-        tag = topics_mod.TOPICS[topic_key]["title"].upper()
-        data = render.render(tag, title, item.get("lead", "")[:80], invert=(topic_key == "pepe"))
-        image_path = cfg.OUT / f"topic_{topic_key}.jpg"
-        image_path.write_bytes(data)
+        print(f"[{topic_key}] нет картинки — пропускаем (пустые карточки не публикуем)")
+        return 1
     if not publish:
         print("картинка:", image_path)
         print(text)
@@ -254,6 +252,32 @@ def cmd_topic(topic_key: str, publish: bool = True) -> int:
     seen.add(item["link"])
     news_mod.save_seen(seen)
     print(f"[{topic_key}] опубликовано:", item["title"][:60])
+    return 0
+
+
+def cmd_gifts(publish: bool = True) -> int:
+    coin = gram_mod.fetch()
+    if not coin:
+        print("нет данных GRAM")
+        return 1
+    collections = gifts_mod.fetch_collections(4)
+    if not collections:
+        print("не удалось получить коллекции подарков")
+        return 1
+    data = gifts_mod.render(coin, collections)
+    (cfg.OUT / "gifts.jpg").write_bytes(data)
+    text = gifts_mod.caption(coin, collections)
+    if not publish:
+        print("картинка:", cfg.OUT / "gifts.jpg")
+        print(text)
+        return 0
+    tg = poster.Telegram(cfg.BOT_TOKEN)
+    result = tg.call("sendPhoto", files={"photo": ("gifts.jpg", data, "image/jpeg")},
+                     chat_id=cfg.CHANNEL, caption=text[:1024], parse_mode="HTML")
+    if not result.get("ok"):
+        print("ошибка публикации:", result)
+        return 1
+    print("подарки опубликованы:", ", ".join(c["name"] for c in collections))
     return 0
 
 
@@ -289,6 +313,8 @@ def cmd_loop() -> int:
                         code = cmd_post_now()
                 elif kind == "gram":
                     code = cmd_gram(True)
+                elif kind == "gifts":
+                    code = cmd_gifts(True)
                 elif kind in topics_mod.TOPICS:
                     code = cmd_topic(kind, True)
 
@@ -365,6 +391,7 @@ def main() -> int:
     parser.add_argument("--market", action="store_true", help="опубликовать рыночный пост")
     parser.add_argument("--market-preview", action="store_true", help="только собрать картинку")
     parser.add_argument("--gram", action="store_true", help="пост про GRAM")
+    parser.add_argument("--gifts", action="store_true", help="подарки Telegram")
     parser.add_argument("--topic", default="", help="тема: nft, gram, telegram, durov")
     parser.add_argument("--gif-news", action="store_true", help="гифка по новости")
     parser.add_argument("--gif-market", action="store_true", help="гифка рынка")
@@ -390,6 +417,8 @@ def main() -> int:
         return cmd_topic(args.topic, publish=True)
     if args.gram:
         return cmd_gram(publish=True)
+    if args.gifts:
+        return cmd_gifts(publish=True)
     if args.gif_market:
         return cmd_gif_market(True)
     if args.gif_news:
